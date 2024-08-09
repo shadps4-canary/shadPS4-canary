@@ -1,0 +1,118 @@
+# SPDX-FileCopyrightText: 2024 shadPS4 Emulator Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+name: Qt Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  Linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+          submodules: recursive
+
+    - name: Install misc packages
+      run: >
+       sudo apt-get update && sudo apt install libx11-dev libxext-dev libwayland-dev libfuse2 clang build-essential qt6-base-dev
+
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DENABLE_QT_GUI=ON
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel
+
+    - name: Run AppImage packaging script
+      run:  ./.github/linux-appimage-qt.sh
+
+    - name: Upload executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: shadps4-linux-qt
+        path: |
+          ${{github.workspace}}/build/shadps4
+
+  Windows:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.7.2
+        host: windows
+        target: desktop
+        arch: win64_msvc2019_64
+        archives: qtbase
+
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -T ClangCL -DENABLE_QT_GUI=ON
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel
+
+    - name: Upload executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: shadps4-win64-qt
+        path: |
+          ${{github.workspace}}/build/Release/shadPS4.exe
+
+  macOS:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup latest Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest
+
+    - name: Install MoltenVK
+      run: |
+        arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        arch -x86_64 /usr/local/bin/brew install molten-vk
+
+    - name: Setup Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.7.2
+        host: mac
+        target: desktop
+        arch: clang_64
+        archives: qtbase
+
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_OSX_ARCHITECTURES=x86_64 -DENABLE_QT_GUI=ON
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel $(sysctl -n hw.ncpu)
+
+    - name: Package
+      run: |
+        mkdir upload
+        mv ${{github.workspace}}/build/shadps4.app upload
+        macdeployqt upload/shadps4.app
+        tar cf shadps4-macos-qt.tar.gz -C upload .
+
+    - name: Upload executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: shadps4-macos-qt
+        path: shadps4-macos-qt

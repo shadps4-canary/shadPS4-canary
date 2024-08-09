@@ -1,0 +1,39 @@
+name: Deploy Canary Release
+on: 
+  workflow_dispatch:
+
+jobs:
+  call-release-build:
+    uses: ./.github/workflows/Build.yml
+    with:
+      deploymode: release
+      experimentalversion: ${{ github.run_number }}
+  deploy:
+    name: Deploy Canary Release
+    runs-on: ubuntu-24.04
+    needs: call-release-build
+    steps:
+      - uses: actions/checkout@v4
+ 
+      - uses: actions/download-artifact@v4
+        with:
+        name: shadps4-linux-qt
+        path: |
+          ${{github.workspace}}/build/shadps4
+
+      - uses: actions/download-artifact@v4
+        with:
+        name: shadps4-win64-qt
+        path: |
+          ${{github.workspace}}/build/Release/shadPS4.exe
+
+      - uses: actions/download-artifact@v4
+        with:
+        name: shadps4-macos-qt
+        path: shadps4-macos-qt
+
+      - name: Create release
+        run: |
+          wget -O ghr.tar.gz https://github.com/tcnksm/ghr/releases/download/v0.16.2/ghr_v0.16.2_linux_amd64.tar.gz
+          tar xvzf ghr.tar.gz; rm ghr.tar.gz
+          ghr_v0.16.2_linux_amd64/ghr -prerelease -t ${{ secrets.GITHUB_TOKEN }} -n "shadPS4 v0.1.1 WIP" -b "shadPS4 canary release" "v0.1.1 WIP" ./upload
